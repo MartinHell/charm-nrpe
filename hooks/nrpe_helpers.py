@@ -320,12 +320,12 @@ class SubordinateCheckDefinitions(dict):
                 'cmd_exec': local_plugin_dir + 'check_mem.pl',
                 'cmd_params': hookenv.config('mem'),
             },
-            {
-                'description': 'Connnection tracking table',
-                'cmd_name': 'check_conntrack',
-                'cmd_exec': local_plugin_dir + 'check_conntrack.sh',
-                'cmd_params': hookenv.config('conntrack'),
-            },
+            # {
+            #     'description': 'Connnection tracking table',
+            #     'cmd_name': 'check_conntrack',
+            #     'cmd_exec': local_plugin_dir + 'check_conntrack.sh',
+            #     'cmd_params': hookenv.config('conntrack'),
+            # },
         ]
         self['checks'] = []
         sub_postfix = str(hookenv.config("sub_postfix"))
