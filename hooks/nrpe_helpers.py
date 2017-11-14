@@ -1,9 +1,11 @@
+import glob
 import socket
 import yaml
 import subprocess
 
 from charmhelpers.core.services import helpers
 from charmhelpers.core import hookenv
+import os
 
 
 class Monitors(dict):
@@ -74,7 +76,8 @@ class MonitorsRelation(helpers.RelationContext):
         """ Return default monitors defined by this charm """
         monitors = Monitors()
         for check in SubordinateCheckDefinitions()['checks']:
-            monitors.add_nrpe_check(check['cmd_name'], check['cmd_name'])
+            if check['cmd_params']:
+                monitors.add_nrpe_check(check['cmd_name'], check['cmd_name'])
         return monitors
 
     def get_user_defined_monitors(self):
@@ -128,6 +131,7 @@ class MonitorsRelation(helpers.RelationContext):
             'target-id': self.principal_relation.nagios_hostname(),
             'monitors': self.get_monitors(),
             'private-address': address,
+            'machine_id': os.environ['JUJU_MACHINE_ID'],
         }
         return relation_info
 
@@ -154,10 +158,12 @@ class PrincipalRelation(helpers.RelationContext):
     def nagios_hostname(self):
         """ Return the string that nagios will use to identify this host """
         host_context = hookenv.config('nagios_host_context')
+        if host_context:
+            host_context += '-'
         hostname_type = hookenv.config('nagios_hostname_type')
         if hostname_type == 'host' or not self.is_ready():
-            nagios_hostname = "{}-{}".format(host_context,
-                                             socket.gethostname())
+            nagios_hostname = "{}{}".format(host_context,
+                                            socket.gethostname())
             return nagios_hostname
         else:
             principal_unitname = hookenv.principal_unit()
@@ -167,7 +173,7 @@ class PrincipalRelation(helpers.RelationContext):
                     if relunit.get('primary', 'False').lower() == 'true':
                         principal_unitname = relunit['__unit__']
                         break
-            nagios_hostname = "{}-{}".format(host_context, principal_unitname)
+            nagios_hostname = "{}{}".format(host_context, principal_unitname)
             nagios_hostname = nagios_hostname.replace('/', '-')
             return nagios_hostname
 
@@ -269,6 +275,11 @@ class SubordinateCheckDefinitions(dict):
         else:
             load_thresholds = hookenv.config('load')
 
+        if hookenv.config('disk_root'):
+            disk_root_thresholds = hookenv.config('disk_root') + " -p / "
+        else:
+            disk_root_thresholds = ''
+
         pkg_plugin_dir = '/usr/lib/nagios/plugins/'
         local_plugin_dir = '/usr/local/lib/nagios/plugins/'
         checks = [
@@ -276,7 +287,7 @@ class SubordinateCheckDefinitions(dict):
                 'description': 'Root disk',
                 'cmd_name': 'check_disk_root',
                 'cmd_exec': pkg_plugin_dir + 'check_disk',
-                'cmd_params': hookenv.config('disk_root') + " -p / ",
+                'cmd_params': disk_root_thresholds,
             },
             {
                 'description': 'Number of Zombie processes',
@@ -329,9 +340,16 @@ class SubordinateCheckDefinitions(dict):
         ]
         self['checks'] = []
         sub_postfix = str(hookenv.config("sub_postfix"))
+        # Automatically use _sub for checks shipped on a unit with the nagios
+        # charm. Mostly for backwards compatibility.
+        principal_unit = hookenv.principal_unit()
+        if sub_postfix == '' and principal_unit:
+            md = hookenv._metadata_unit(principal_unit)
+            if md and md.pop('name', None) == 'nagios':
+                sub_postfix = '_sub'
         for check in checks:
-            if check['cmd_params'] == "":
-                continue
+            # This can be used to clean up old files before rendering the new ones
+            check['matching_files'] = glob.glob('/etc/nagios/nrpe.d/{}*.cfg'.format(check['cmd_name']))
             check['description'] += " (sub)"
             check['cmd_name'] += sub_postfix
             self['checks'].append(check)
