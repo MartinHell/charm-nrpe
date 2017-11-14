@@ -10,7 +10,7 @@
 netnsok=()
 netnscrit=()
 
-for ns in $(ip netns list); do
+for ns in $(ip netns list | awk '{print $1}'); do
     output=$(ip netns exec $ns ip a 2>/dev/null)
     err=$?
     if [ $err -eq 0 ]; then
@@ -29,7 +29,7 @@ if [ ${#netnscrit[@]} -eq 0 ]; then
         exit $STATE_OK
     fi
 else
-    echo "CRIT: ${netnscrit[@]} aren't responding"
+    echo "CRITICAL: ${netnscrit[@]} aren't responding"
     exit $STATE_CRIT
 fi
 
